@@ -24,8 +24,11 @@ IO.on('connection', (socket) => {
     socket.broadcast.emit('message', 'A new user has joined.');
 
     socket.on('sendMessage', (clientMessage) => {
-        message = clientMessage;
-        IO.emit('message', message);
+        IO.emit('message', clientMessage);
+    })
+
+    socket.on('sendLocation', ({ latitude, longitude}) => {
+        IO.emit('message', `https://google.com/maps?q=${latitude},${longitude}`)
     })
 
     socket.on('disconnect', () => {
