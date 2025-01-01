@@ -9,23 +9,62 @@ const $messages = document.querySelector('#messages');
 //Templates
 const messageTemplate = document.querySelector('#message-template').innerHTML;
 const sendLocationTemplate = document.querySelector('#send-location-template').innerHTML;
+const sidebarTemplate = document.querySelector('#sidebar-template').innerHTML;
 
-SOCKET.on('message', ({text, createdAt}) => {
+// Options
+const { username, room } = Qs.parse(location.search, { ignoreQueryPrefix: true })
+
+const autoscroll = () => {
+    // New message element
+    const $newMessage = $messages.lastElementChild
+
+    // Height of the new message
+    const newMessageStyles = getComputedStyle($newMessage);
+    const newMessageMargin = parseInt(newMessageStyles.marginBottom);
+    const newMessageHeight = $newMessage.offsetHeight + newMessageMargin;
+
+    // Visible height
+    const visibleHeight = $messages.offsetHeight;
+
+    // Height of messages container
+    const containerHeight = $messages.scrollHeight;
+
+    // How far have I scrolled?
+    const scrollOffset = $messages.scrollTo + visibleHeight;
+
+    if (containerHeight - newMessageHeight <= scrollOffset) {
+        $messages.scrollTop = $messages.scrollHeight
+    }
+}
+
+SOCKET.on('message', ({username, text, createdAt}) => {
     console.log({text, createdAt});
     const html = Mustache.render(messageTemplate, {
+        username,
         message: text,
         createdAt: moment(createdAt).format('h:mm a')
     });
     $messages.insertAdjacentHTML('beforeend', html);
+    autoscroll();
 })
 
-SOCKET.on('locationMessage', ({url, createdAt}) => {
+SOCKET.on('locationMessage', ({username, url, createdAt}) => {
     console.log({url, createdAt});
     const html = Mustache.render(sendLocationTemplate, {
+        username,
         url,
         createdAt: moment(createdAt).format('h:mm a')
     })
     $messages.insertAdjacentHTML('beforeend', html);
+    autoscroll();
+})
+
+SOCKET.on('roomData', ({ room, users}) => {
+    const html = Mustache.render(sidebarTemplate, {
+        room,
+        users
+    })
+    document.querySelector('#sidebar').innerHTML = html;
 })
 
 $MESSAGE_FORM.addEventListener(
@@ -68,9 +107,12 @@ $LOCATION_BUTTON.addEventListener(
                 console.log('Location shared!')
             });
         })
-
     }
 )
 
-
-
+SOCKET.emit('join', { username, room }, (error) => {
+    if (error) {
+        alert(error)
+        location.href = '/'
+    }
+});

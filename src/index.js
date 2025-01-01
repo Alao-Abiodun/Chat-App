@@ -3,6 +3,7 @@ const http = require('http');
 const express = require('express');
 const SOCKETIO = require('socket.io');
 const { generateMessage, generateLocationMessage } = require('./utils/messages');
+const { addUser, removeUser, getUser, getUsersInRoom } = require('./utils/users')
 
 const PORT = process.env.PORT || 3000;
 
@@ -20,28 +21,57 @@ let message = 'Welcome!'
 IO.on('connection', (socket) => {
     console.log('New WebSocket connected');
 
-    socket.emit('message', generateMessage(message));
+    socket.on('join', ({ username, room }, callback) => {
+        const { error, user } = addUser({ id: socket.id, username, room })
 
-    socket.broadcast.emit('message', generateMessage('A new user has joined.'));
+        if (error) {
+            return callback(error)
+        }
+
+        socket.join(user.room);
+
+        socket.emit('message', generateMessage('Admin', message));
+        socket.broadcast.to(user.room).emit('message', generateMessage(`${user.username} has joined!`));
+        IO.to(user.room).emit('roomData', { 
+            room: user.room,
+            users: getUsersInRoom(user.room)
+        })
+
+        callback();
+    })
 
     socket.on('sendMessage', (clientMessage, callback) => {
-        // const filter = new Filter()
+        const user = getUser(socket.id);
 
-        // if (filter.isProfane(message)) {
-        //     return callback('Profanity is not allowed!');
-        // }
+        if (!user) {
+            return callback('User not found!');
+        }
 
-        IO.emit('message', generateMessage(clientMessage));
+        IO.to(user.room).emit('message', generateMessage(user.username, clientMessage));
         callback()
     })
 
     socket.on('sendLocation', ({ latitude, longitude}, callback) => {
-        IO.emit('locationMessage', generateLocationMessage(`https://google.com/maps?q=${latitude},${longitude}`))
+        const user = getUser(socket.id);
+
+        if (!user) {
+            return callback('User not found!');
+        }
+
+        IO.to(user.room).emit('locationMessage', generateLocationMessage(user.username, `https://google.com/maps?q=${latitude},${longitude}`))
         callback();
     })
 
     socket.on('disconnect', () => {
-        IO.emit('message', generateMessage('A user has left!'));
+        const user = removeUser(socket.id);
+
+        if (user) {
+            IO.to(user.room).emit('message', generateMessage('Admin', `${user.username} has left!`));
+            IO.to(user.room).emit('roomData', { 
+                room: user.room,
+                users: getUsersInRoom(user.room)
+            })
+        }
     })
 })
 
@@ -49,4 +79,3 @@ SERVER.listen(PORT, () => {
     console.clear();
     console.log(`The Server is listening on port ${PORT}`)
 })
-
